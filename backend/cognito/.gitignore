@@ -1,0 +1,25 @@
+# AWS CloudFormation outputs
+outputs.json
+stack-outputs.txt
+
+# Credentials and secrets
+*.pem
+*.key
+credentials.txt
+passwords.txt
+
+# Environment files with secrets
+.env.local
+.env.production
+
+# AWS CLI cache
+.aws-sam/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+~*

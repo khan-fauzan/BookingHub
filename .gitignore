@@ -1,27 +1,18 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 /node_modules
 /.pnp
 .pnp.js
 .yarn/install-state.gz
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
 
 # testing
 /coverage
-*.test.js
-*.spec.js
 
 # next.js
 /.next/
 /out/
-next-env.d.ts
 
 # production
 /build
-/dist
 
 # misc
 .DS_Store
@@ -31,77 +22,21 @@ next-env.d.ts
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
 
 # local env files
-.env
 .env*.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env
+.env.production
 
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
+next-env.d.ts
 
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-.vscode/settings.json
-
-# IDE - JetBrains
-.idea
-*.iml
-*.iws
-.idea_modules/
-
-# IDE - Others
-*.swp
-*.swo
-*~
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# temporary files
-*.tmp
-*.temp
-*.cache
-
-# logs
-logs
-*.log
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Storybook
-storybook-static
-
-# Prisma
-/prisma/migrations/migration_lock.toml
+# AWS and Credentials
+*.pem
+*.key
+credentials.txt
+passwords.txt

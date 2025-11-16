@@ -1,0 +1,326 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for Hotel Booking Platform - Cognito User Pool with Web Client and Initial User'
+
+Parameters:
+  AppName:
+    Type: String
+    Default: hotel-booking-platform
+    Description: Application name for resource naming (lowercase, hyphens only)
+
+Resources:
+  # Cognito User Pool
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${AppName}-UserPool'
+      # Username and Sign-in Configuration
+      UsernameAttributes:
+        - email
+      UsernameConfiguration:
+        CaseSensitive: false
+
+      # Password Policy
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          TemporaryPasswordValidityDays: 7
+
+      # MFA Configuration
+      MfaConfiguration: OPTIONAL
+      EnabledMfas:
+        - SOFTWARE_TOKEN_MFA
+
+      # Account Recovery
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+      # Email Configuration
+      EmailConfiguration:
+        EmailSendingAccount: COGNITO_DEFAULT
+
+      # Auto-verified Attributes
+      AutoVerifiedAttributes:
+        - email
+
+      # User Attribute Schema
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+        - Name: given_name
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+        - Name: family_name
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+        - Name: phone_number
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+
+      # User Pool Add-ons
+      UserPoolAddOns:
+        AdvancedSecurityMode: AUDIT
+
+      # Deletion Protection (set to INACTIVE for development, ACTIVE for production)
+      DeletionProtection: INACTIVE
+
+      UserPoolTags:
+        Name: !Sub '${AppName}-UserPool'
+        Environment: Development
+        Application: HotelBooking
+
+  # Cognito User Pool Web Client
+  UserPoolWebClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub '${AppName}-WebClient'
+      UserPoolId: !Ref UserPool
+
+      # OAuth Settings
+      GenerateSecret: false
+      RefreshTokenValidity: 30
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      TokenValidityUnits:
+        RefreshToken: days
+        AccessToken: minutes
+        IdToken: minutes
+
+      # Allowed OAuth Flows
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthFlowsUserPoolClient: true
+
+      # Allowed OAuth Scopes
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+
+      # Callback URLs (update these for production)
+      CallbackURLs:
+        - http://localhost:3000/auth/callback
+        - http://localhost:3000
+
+      # Logout URLs
+      LogoutURLs:
+        - http://localhost:3000
+        - http://localhost:3000/auth/logout
+
+      # Supported Identity Providers
+      SupportedIdentityProviders:
+        - COGNITO
+
+      # Explicit Auth Flows
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+
+      # Prevent User Existence Errors
+      PreventUserExistenceErrors: ENABLED
+
+      # Attribute Read/Write Permissions
+      ReadAttributes:
+        - email
+        - email_verified
+        - given_name
+        - family_name
+        - phone_number
+
+      WriteAttributes:
+        - email
+        - given_name
+        - family_name
+        - phone_number
+
+  # User Pool Domain
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub 'hotelbooking-${AWS::AccountId}'
+      UserPoolId: !Ref UserPool
+
+  # Initial Admin User
+  InitialAdminUser:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPool
+      Username: admin@hotelbooking.com
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: admin@hotelbooking.com
+        - Name: email_verified
+          Value: 'true'
+        - Name: given_name
+          Value: Admin
+        - Name: family_name
+          Value: User
+
+      # Temporary password - CHANGE THIS IN PRODUCTION
+      # User will be forced to change on first login
+      MessageAction: SUPPRESS
+
+  # Lambda function to set initial password
+  SetPasswordFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AppName}-SetPassword'
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt SetPasswordFunctionRole.Arn
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+          import random
+          import string
+
+          def generate_password():
+              # Generate a random password that meets Cognito requirements
+              length = 12
+              lowercase = string.ascii_lowercase
+              uppercase = string.ascii_uppercase
+              digits = string.digits
+              symbols = '!@#$%^&*'
+
+              # Ensure at least one of each required character type
+              password = [
+                  random.choice(lowercase),
+                  random.choice(uppercase),
+                  random.choice(digits),
+                  random.choice(symbols)
+              ]
+
+              # Fill the rest with random characters
+              all_chars = lowercase + uppercase + digits + symbols
+              password.extend(random.choice(all_chars) for _ in range(length - 4))
+
+              # Shuffle to avoid predictable pattern
+              random.shuffle(password)
+              return ''.join(password)
+
+          def handler(event, context):
+              try:
+                  request_type = event['RequestType']
+
+                  if request_type == 'Create':
+                      user_pool_id = event['ResourceProperties']['UserPoolId']
+                      username = event['ResourceProperties']['Username']
+
+                      client = boto3.client('cognito-idp')
+
+                      # Generate password
+                      password = generate_password()
+
+                      # Set permanent password
+                      client.admin_set_user_password(
+                          UserPoolId=user_pool_id,
+                          Username=username,
+                          Password=password,
+                          Permanent=False  # User must change on first login
+                      )
+
+                      response_data = {
+                          'Password': password,
+                          'Username': username
+                      }
+
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+
+                  elif request_type == 'Update':
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+
+                  elif request_type == 'Delete':
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+
+  SetPasswordFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CognitoAdminSetPassword
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:AdminSetUserPassword
+                Resource: !GetAtt UserPool.Arn
+
+  # Custom resource to set password
+  SetInitialPassword:
+    Type: Custom::SetPassword
+    DependsOn: InitialAdminUser
+    Properties:
+      ServiceToken: !GetAtt SetPasswordFunction.Arn
+      UserPoolId: !Ref UserPool
+      Username: admin@hotelbooking.com
+
+Outputs:
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub '${AppName}-UserPoolId'
+
+  UserPoolArn:
+    Description: Cognito User Pool ARN
+    Value: !GetAtt UserPool.Arn
+    Export:
+      Name: !Sub '${AppName}-UserPoolArn'
+
+  UserPoolWebClientId:
+    Description: Cognito User Pool Web Client ID
+    Value: !Ref UserPoolWebClient
+    Export:
+      Name: !Sub '${AppName}-UserPoolWebClientId'
+
+  UserPoolDomain:
+    Description: Cognito User Pool Domain
+    Value: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
+    Export:
+      Name: !Sub '${AppName}-UserPoolDomain'
+
+  InitialUsername:
+    Description: Initial admin user username
+    Value: admin@hotelbooking.com
+
+  InitialUserPassword:
+    Description: Initial admin user temporary password (CHANGE ON FIRST LOGIN)
+    Value: !GetAtt SetInitialPassword.Password
+
+  CognitoHostedUIUrl:
+    Description: Cognito Hosted UI URL for testing
+    Value: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com/login?client_id=${UserPoolWebClient}&response_type=code&redirect_uri=http://localhost:3000/auth/callback'
+
+  Region:
+    Description: AWS Region
+    Value: !Ref AWS::Region

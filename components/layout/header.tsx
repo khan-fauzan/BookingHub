@@ -2,14 +2,26 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui";
-import { User, Menu, X, Heart, Calendar } from "lucide-react";
+import { Menu, X, Calendar, LogOut } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/lib/auth/auth-context";
+import { useRouter } from "next/navigation";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, signOut, loading } = useAuth();
+  const router = useRouter();
 
-  // This will be replaced with actual auth state later
-  const isAuthenticated = false;
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.push('/');
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+  };
+
+  const isAuthenticated = !!user;
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-neutral-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
@@ -56,19 +68,14 @@ export function Header() {
           {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center space-x-3">
             {isAuthenticated ? (
-              <>
-                <Link href="/wishlist">
-                  <Button variant="ghost" size="sm">
-                    <Heart className="h-5 w-5" />
-                  </Button>
-                </Link>
-                <Link href="/dashboard">
-                  <Button variant="ghost" size="sm">
-                    <User className="h-5 w-5 mr-2" />
-                    My Account
-                  </Button>
-                </Link>
-              </>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSignOut}
+                title="Sign Out"
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
             ) : (
               <>
                 <Link href="/login">
@@ -129,20 +136,17 @@ export function Header() {
               </Link>
               <div className="pt-3 border-t border-neutral-200 space-y-2">
                 {isAuthenticated ? (
-                  <>
-                    <Link href="/wishlist">
-                      <Button variant="ghost" fullWidth>
-                        <Heart className="h-5 w-5 mr-2" />
-                        Wishlist
-                      </Button>
-                    </Link>
-                    <Link href="/dashboard">
-                      <Button variant="ghost" fullWidth>
-                        <User className="h-5 w-5 mr-2" />
-                        My Account
-                      </Button>
-                    </Link>
-                  </>
+                  <Button
+                    variant="outline"
+                    fullWidth
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleSignOut();
+                    }}
+                  >
+                    <LogOut className="h-5 w-5 mr-2" />
+                    Sign Out
+                  </Button>
                 ) : (
                   <>
                     <Link href="/login">

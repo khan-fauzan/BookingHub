@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Header, Footer } from "@/components/layout";
+import { AuthProvider } from "@/lib/auth/auth-context";
+import { AmplifyConfigProvider } from "@/components/providers/amplify-config-provider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -29,9 +31,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className={`${inter.className} antialiased`}>
-        <Header />
-        {children}
-        <Footer />
+        <AmplifyConfigProvider>
+          <AuthProvider>
+            <Header />
+            {children}
+            <Footer />
+          </AuthProvider>
+        </AmplifyConfigProvider>
       </body>
     </html>
   );

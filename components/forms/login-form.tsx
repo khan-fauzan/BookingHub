@@ -7,9 +7,18 @@ import { Button, Input, Checkbox } from "@/components/ui";
 import { Mail, Lock } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth/auth-context";
+import { useRouter } from "next/navigation";
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [requiresPasswordChange, setRequiresPasswordChange] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const { signIn, completeNewPassword } = useAuth();
+  const router = useRouter();
 
   const {
     register,
@@ -21,17 +30,123 @@ export function LoginForm() {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
-    console.log("Login data:", data);
+    setError(null);
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await signIn(data.email, data.password);
+      router.push('/'); // Redirect to homepage after successful login
+    } catch (err: any) {
+      console.error("Login error:", err);
+
+      // Check if password change is required
+      if (err.message === 'PASSWORD_CHANGE_REQUIRED') {
+        setRequiresPasswordChange(true);
+        setError('You must change your password before continuing.');
+      } else {
+        setError(err.message || 'Failed to sign in. Please check your credentials.');
+      }
+    } finally {
       setIsLoading(false);
-      alert("Login form submitted! (Frontend only - no backend integration yet)");
-    }, 1500);
+    }
   };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setPasswordError(null);
+
+    // Validate passwords match
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match');
+      setIsLoading(false);
+      return;
+    }
+
+    // Validate password strength (Cognito requirements)
+    if (newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters long');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      await completeNewPassword(newPassword);
+      router.push('/'); // Redirect after successful password change
+    } catch (err: any) {
+      console.error("Password change error:", err);
+      setPasswordError(err.message || 'Failed to change password');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Show password change form if required
+  if (requiresPasswordChange) {
+    return (
+      <form onSubmit={handlePasswordChange} className="space-y-5">
+        <div className="rounded-md bg-blue-50 p-4 border border-blue-200">
+          <p className="text-sm text-blue-800">
+            You must change your password before continuing. Please enter a new password.
+          </p>
+        </div>
+
+        {passwordError && (
+          <div className="rounded-md bg-red-50 p-4 border border-red-200">
+            <p className="text-sm text-red-800">{passwordError}</p>
+          </div>
+        )}
+
+        <Input
+          label="New Password"
+          type="password"
+          placeholder="Enter new password"
+          leftIcon={<Lock className="h-5 w-5" />}
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          required
+        />
+
+        <Input
+          label="Confirm New Password"
+          type="password"
+          placeholder="Confirm new password"
+          leftIcon={<Lock className="h-5 w-5" />}
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          required
+        />
+
+        <div className="text-xs text-neutral-600 space-y-1">
+          <p>Password requirements:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            <li>At least 8 characters long</li>
+            <li>Contains uppercase and lowercase letters</li>
+            <li>Contains numbers</li>
+            <li>Contains special characters</li>
+          </ul>
+        </div>
+
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          isLoading={isLoading}
+        >
+          Change Password
+        </Button>
+      </form>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      {error && (
+        <div className="rounded-md bg-red-50 p-4 border border-red-200">
+          <p className="text-sm text-red-800">{error}</p>
+        </div>
+      )}
+
       <Input
         label="Email Address"
         type="email"
