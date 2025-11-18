@@ -1,0 +1,1135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Hotel Booking Platform - API Gateway REST API with Lambda integrations'
+
+Parameters:
+  Environment:
+    Type: String
+    Description: Environment name
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Default: dev
+
+  ApiStageName:
+    Type: String
+    Description: API Gateway stage name
+    Default: v1
+
+  DynamoDBStackName:
+    Type: String
+    Description: Name of the DynamoDB CloudFormation stack
+    Default: hotel-booking-dynamodb-dev
+
+  CognitoUserPoolArn:
+    Type: String
+    Description: ARN of Cognito User Pool for authentication (optional)
+    Default: ''
+
+  EnableCORS:
+    Type: String
+    Description: Enable CORS for API Gateway
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+
+  LogRetentionDays:
+    Type: Number
+    Description: CloudWatch Logs retention period in days
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
+    Default: 30
+
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+  HasCognito: !Not [!Equals [!Ref CognitoUserPoolArn, '']]
+  EnableCORSCondition: !Equals [!Ref EnableCORS, 'true']
+
+Resources:
+  # ============================================================================
+  # API Gateway REST API
+  # ============================================================================
+
+  HotelBookingApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 'hotel-booking-api-${Environment}'
+      Description: Hotel Booking Platform REST API
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Policy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: 'execute-api:Invoke'
+            Resource: '*'
+
+  # ============================================================================
+  # API Gateway Authorizer (Cognito)
+  # ============================================================================
+
+  CognitoAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Condition: HasCognito
+    Properties:
+      Name: CognitoAuthorizer
+      Type: COGNITO_USER_POOLS
+      IdentitySource: method.request.header.Authorization
+      RestApiId: !Ref HotelBookingApi
+      ProviderARNs:
+        - !Ref CognitoUserPoolArn
+
+  # ============================================================================
+  # Request/Response Models
+  # ============================================================================
+
+  ErrorResponseModel:
+    Type: AWS::ApiGateway::Model
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ContentType: application/json
+      Name: ErrorResponse
+      Schema:
+        $schema: 'http://json-schema.org/draft-04/schema#'
+        type: object
+        properties:
+          success:
+            type: boolean
+          error:
+            type: object
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+              requestId:
+                type: string
+              timestamp:
+                type: string
+
+  # ============================================================================
+  # Lambda Execution Role
+  # ============================================================================
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'hotel-booking-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:TransactWriteItems
+                  - dynamodb:TransactGetItems
+                Resource:
+                  - Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTableArn'
+                  - Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableArn'
+                  - Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTableArn'
+                  - Fn::ImportValue: !Sub '${DynamoDBStackName}-UsersTableArn'
+                  - Fn::ImportValue: !Sub '${DynamoDBStackName}-ReviewsTableArn'
+                  - Fn::ImportValue: !Sub '${DynamoDBStackName}-MetadataTableArn'
+                  - !Sub
+                    - '${TableArn}/index/*'
+                    - TableArn:
+                        Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTableArn'
+                  - !Sub
+                    - '${TableArn}/index/*'
+                    - TableArn:
+                        Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableArn'
+                  - !Sub
+                    - '${TableArn}/index/*'
+                    - TableArn:
+                        Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTableArn'
+                  - !Sub
+                    - '${TableArn}/index/*'
+                    - TableArn:
+                        Fn::ImportValue: !Sub '${DynamoDBStackName}-UsersTableArn'
+                  - !Sub
+                    - '${TableArn}/index/*'
+                    - TableArn:
+                        Fn::ImportValue: !Sub '${DynamoDBStackName}-ReviewsTableArn'
+
+  # ============================================================================
+  # Lambda Functions - Property Search
+  # ============================================================================
+
+  SearchPropertiesFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-search-properties-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          PROPERTIES_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTableName'
+          AVAILABILITY_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              // Placeholder for search properties implementation
+              console.log('Search Properties:', JSON.stringify(event));
+              return {
+                  statusCode: 200,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: {
+                          properties: [],
+                          pagination: {
+                              limit: 20,
+                              offset: 0,
+                              total: 0,
+                              hasMore: false
+                          }
+                      },
+                      meta: {
+                          timestamp: new Date().toISOString(),
+                          requestId: event.requestContext.requestId
+                      }
+                  })
+              };
+          };
+
+  GetPropertyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-get-property-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          PROPERTIES_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Get Property:', JSON.stringify(event));
+              const propertyId = event.pathParameters?.propertyId;
+              return {
+                  statusCode: 200,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: { property: { propertyId } }
+                  })
+              };
+          };
+
+  GetFeaturedPropertiesFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-featured-properties-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          PROPERTIES_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Get Featured Properties:', JSON.stringify(event));
+              return {
+                  statusCode: 200,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: { properties: [] }
+                  })
+              };
+          };
+
+  # ============================================================================
+  # Lambda Functions - Availability & Pricing
+  # ============================================================================
+
+  CheckAvailabilityFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-check-availability-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          AVAILABILITY_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Check Availability:', JSON.stringify(event));
+              return {
+                  statusCode: 200,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: {
+                          available: true,
+                          roomsAvailable: 5
+                      }
+                  })
+              };
+          };
+
+  CalculatePricingFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-calculate-pricing-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          AVAILABILITY_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableName'
+          METADATA_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-MetadataTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Calculate Pricing:', JSON.stringify(event));
+              return {
+                  statusCode: 200,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: {
+                          pricing: {
+                              total: 0,
+                              currency: 'USD'
+                          }
+                      }
+                  })
+              };
+          };
+
+  # ============================================================================
+  # Lambda Functions - Booking Management
+  # ============================================================================
+
+  CreateBookingFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-create-booking-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          BOOKINGS_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTableName'
+          AVAILABILITY_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Create Booking:', JSON.stringify(event));
+              return {
+                  statusCode: 201,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: {
+                          booking: {
+                              bookingId: 'bkg_' + Date.now(),
+                              status: 'confirmed'
+                          }
+                      }
+                  })
+              };
+          };
+
+  GetUserBookingsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-get-user-bookings-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          BOOKINGS_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Get User Bookings:', JSON.stringify(event));
+              return {
+                  statusCode: 200,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: { bookings: [] }
+                  })
+              };
+          };
+
+  CancelBookingFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-cancel-booking-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          BOOKINGS_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTableName'
+          AVAILABILITY_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Cancel Booking:', JSON.stringify(event));
+              return {
+                  statusCode: 200,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: {
+                          bookingId: event.pathParameters?.bookingId,
+                          status: 'cancelled'
+                      }
+                  })
+              };
+          };
+
+  # ============================================================================
+  # Lambda Functions - User Management
+  # ============================================================================
+
+  GetUserProfileFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-get-user-profile-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          USERS_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-UsersTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Get User Profile:', JSON.stringify(event));
+              return {
+                  statusCode: 200,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: { user: {} }
+                  })
+              };
+          };
+
+  UpdateUserProfileFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-update-user-profile-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          USERS_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-UsersTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Update User Profile:', JSON.stringify(event));
+              return {
+                  statusCode: 200,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: { user: {} }
+                  })
+              };
+          };
+
+  # ============================================================================
+  # Lambda Functions - Review Management
+  # ============================================================================
+
+  GetPropertyReviewsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-get-reviews-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          REVIEWS_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-ReviewsTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Get Property Reviews:', JSON.stringify(event));
+              return {
+                  statusCode: 200,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: { reviews: [] }
+                  })
+              };
+          };
+
+  CreateReviewFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'hotel-booking-create-review-${Environment}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          REVIEWS_TABLE:
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-ReviewsTableName'
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+              console.log('Create Review:', JSON.stringify(event));
+              return {
+                  statusCode: 201,
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  body: JSON.stringify({
+                      success: true,
+                      data: {
+                          review: {
+                              reviewId: 'rev_' + Date.now(),
+                              status: 'pending'
+                          }
+                      }
+                  })
+              };
+          };
+
+  # ============================================================================
+  # Lambda Permissions
+  # ============================================================================
+
+  SearchPropertiesPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SearchPropertiesFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  GetPropertyPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetPropertyFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  GetFeaturedPropertiesPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetFeaturedPropertiesFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  CheckAvailabilityPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CheckAvailabilityFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  CalculatePricingPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CalculatePricingFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  CreateBookingPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CreateBookingFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  GetUserBookingsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetUserBookingsFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  CancelBookingPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CancelBookingFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  GetUserProfilePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetUserProfileFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  UpdateUserProfilePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref UpdateUserProfileFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  GetPropertyReviewsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetPropertyReviewsFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  CreateReviewPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CreateReviewFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HotelBookingApi}/*'
+
+  # ============================================================================
+  # API Gateway Resources - /v1/properties
+  # ============================================================================
+
+  PropertiesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !GetAtt HotelBookingApi.RootResourceId
+      PathPart: properties
+
+  SearchPropertiesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !Ref PropertiesResource
+      PathPart: search
+
+  FeaturedPropertiesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !Ref PropertiesResource
+      PathPart: featured
+
+  PropertyIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !Ref PropertiesResource
+      PathPart: '{propertyId}'
+
+  PropertyReviewsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !Ref PropertyIdResource
+      PathPart: reviews
+
+  # ============================================================================
+  # API Gateway Resources - /v1/availability
+  # ============================================================================
+
+  AvailabilityResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !GetAtt HotelBookingApi.RootResourceId
+      PathPart: availability
+
+  CheckAvailabilityResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !Ref AvailabilityResource
+      PathPart: check
+
+  # ============================================================================
+  # API Gateway Resources - /v1/pricing
+  # ============================================================================
+
+  PricingResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !GetAtt HotelBookingApi.RootResourceId
+      PathPart: pricing
+
+  CalculatePricingResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !Ref PricingResource
+      PathPart: calculate
+
+  # ============================================================================
+  # API Gateway Resources - /v1/bookings
+  # ============================================================================
+
+  BookingsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !GetAtt HotelBookingApi.RootResourceId
+      PathPart: bookings
+
+  BookingIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !Ref BookingsResource
+      PathPart: '{bookingId}'
+
+  # ============================================================================
+  # API Gateway Resources - /v1/users
+  # ============================================================================
+
+  UsersResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !GetAtt HotelBookingApi.RootResourceId
+      PathPart: users
+
+  UsersMeResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !Ref UsersResource
+      PathPart: me
+
+  UserBookingsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !Ref UsersMeResource
+      PathPart: bookings
+
+  # ============================================================================
+  # API Gateway Resources - /v1/reviews
+  # ============================================================================
+
+  ReviewsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ParentId: !GetAtt HotelBookingApi.RootResourceId
+      PathPart: reviews
+
+  # ============================================================================
+  # API Gateway Methods - Properties
+  # ============================================================================
+
+  SearchPropertiesMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref SearchPropertiesResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SearchPropertiesFunction.Arn}/invocations'
+
+  GetPropertyMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref PropertyIdResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetPropertyFunction.Arn}/invocations'
+
+  GetFeaturedPropertiesMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref FeaturedPropertiesResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetFeaturedPropertiesFunction.Arn}/invocations'
+
+  # ============================================================================
+  # API Gateway Methods - Availability & Pricing
+  # ============================================================================
+
+  CheckAvailabilityMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref CheckAvailabilityResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CheckAvailabilityFunction.Arn}/invocations'
+
+  CalculatePricingMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref CalculatePricingResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CalculatePricingFunction.Arn}/invocations'
+
+  # ============================================================================
+  # API Gateway Methods - Bookings
+  # ============================================================================
+
+  CreateBookingMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref BookingsResource
+      HttpMethod: POST
+      AuthorizationType: !If [HasCognito, COGNITO_USER_POOLS, NONE]
+      AuthorizerId: !If [HasCognito, !Ref CognitoAuthorizer, !Ref AWS::NoValue]
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateBookingFunction.Arn}/invocations'
+
+  GetUserBookingsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref UserBookingsResource
+      HttpMethod: GET
+      AuthorizationType: !If [HasCognito, COGNITO_USER_POOLS, NONE]
+      AuthorizerId: !If [HasCognito, !Ref CognitoAuthorizer, !Ref AWS::NoValue]
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetUserBookingsFunction.Arn}/invocations'
+
+  CancelBookingMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref BookingIdResource
+      HttpMethod: DELETE
+      AuthorizationType: !If [HasCognito, COGNITO_USER_POOLS, NONE]
+      AuthorizerId: !If [HasCognito, !Ref CognitoAuthorizer, !Ref AWS::NoValue]
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CancelBookingFunction.Arn}/invocations'
+
+  # ============================================================================
+  # API Gateway Methods - Users
+  # ============================================================================
+
+  GetUserProfileMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref UsersMeResource
+      HttpMethod: GET
+      AuthorizationType: !If [HasCognito, COGNITO_USER_POOLS, NONE]
+      AuthorizerId: !If [HasCognito, !Ref CognitoAuthorizer, !Ref AWS::NoValue]
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetUserProfileFunction.Arn}/invocations'
+
+  UpdateUserProfileMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref UsersMeResource
+      HttpMethod: PATCH
+      AuthorizationType: !If [HasCognito, COGNITO_USER_POOLS, NONE]
+      AuthorizerId: !If [HasCognito, !Ref CognitoAuthorizer, !Ref AWS::NoValue]
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UpdateUserProfileFunction.Arn}/invocations'
+
+  # ============================================================================
+  # API Gateway Methods - Reviews
+  # ============================================================================
+
+  GetPropertyReviewsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref PropertyReviewsResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetPropertyReviewsFunction.Arn}/invocations'
+
+  CreateReviewMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      ResourceId: !Ref ReviewsResource
+      HttpMethod: POST
+      AuthorizationType: !If [HasCognito, COGNITO_USER_POOLS, NONE]
+      AuthorizerId: !If [HasCognito, !Ref CognitoAuthorizer, !Ref AWS::NoValue]
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateReviewFunction.Arn}/invocations'
+
+  # ============================================================================
+  # API Gateway Deployment
+  # ============================================================================
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - SearchPropertiesMethod
+      - GetPropertyMethod
+      - GetFeaturedPropertiesMethod
+      - CheckAvailabilityMethod
+      - CalculatePricingMethod
+      - CreateBookingMethod
+      - GetUserBookingsMethod
+      - CancelBookingMethod
+      - GetUserProfileMethod
+      - UpdateUserProfileMethod
+      - GetPropertyReviewsMethod
+      - CreateReviewMethod
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      Description: !Sub 'Deployment for ${Environment} environment'
+
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref HotelBookingApi
+      DeploymentId: !Ref ApiDeployment
+      StageName: !Ref ApiStageName
+      Description: !Sub '${Environment} stage'
+      TracingEnabled: true
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: !If [IsProd, false, true]
+          MetricsEnabled: true
+          ThrottlingBurstLimit: !If [IsProd, 5000, 1000]
+          ThrottlingRateLimit: !If [IsProd, 2000, 500]
+
+  # ============================================================================
+  # CloudWatch Logs for API Gateway
+  # ============================================================================
+
+  ApiGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/hotel-booking-${Environment}'
+      RetentionInDays: !Ref LogRetentionDays
+
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
+
+  ApiGatewayCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs'
+
+  # ============================================================================
+  # Usage Plans and API Keys
+  # ============================================================================
+
+  AnonymousUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn: ApiStage
+    Properties:
+      UsagePlanName: !Sub 'hotel-booking-anonymous-${Environment}'
+      Description: Usage plan for anonymous users
+      Throttle:
+        BurstLimit: 200
+        RateLimit: 100
+      Quota:
+        Limit: 10000
+        Period: DAY
+      ApiStages:
+        - ApiId: !Ref HotelBookingApi
+          Stage: !Ref ApiStageName
+
+  AuthenticatedUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn: ApiStage
+    Properties:
+      UsagePlanName: !Sub 'hotel-booking-authenticated-${Environment}'
+      Description: Usage plan for authenticated users
+      Throttle:
+        BurstLimit: 1000
+        RateLimit: 500
+      Quota:
+        Limit: 50000
+        Period: DAY
+      ApiStages:
+        - ApiId: !Ref HotelBookingApi
+          Stage: !Ref ApiStageName
+
+Outputs:
+  ApiId:
+    Description: API Gateway ID
+    Value: !Ref HotelBookingApi
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiId'
+
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${HotelBookingApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiStageName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiEndpoint'
+
+  ApiStage:
+    Description: API Gateway stage name
+    Value: !Ref ApiStageName
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiStage'
+
+  LambdaExecutionRoleArn:
+    Description: Lambda execution role ARN
+    Value: !GetAtt LambdaExecutionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaRoleArn'
