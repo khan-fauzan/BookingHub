@@ -11,7 +11,7 @@ const {
   parseQueryParams,
   NotFoundError,
   handleErrors
-} = require('../shared/utils');
+} = require('./shared/utils');
 
 const REVIEWS_TABLE = process.env.REVIEWS_TABLE;
 

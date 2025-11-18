@@ -15,7 +15,7 @@ const {
   getDatesBetween,
   NotFoundError,
   handleErrors
-} = require('../shared/utils');
+} = require('./shared/utils');
 
 const AVAILABILITY_TABLE = process.env.AVAILABILITY_TABLE;
 const PROPERTIES_TABLE = process.env.PROPERTIES_TABLE;

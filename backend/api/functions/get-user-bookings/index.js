@@ -12,7 +12,7 @@ const {
   getUserId,
   UnauthorizedError,
   handleErrors
-} = require('../shared/utils');
+} = require('./shared/utils');
 
 const BOOKINGS_TABLE = process.env.BOOKINGS_TABLE;
 

@@ -18,7 +18,7 @@ const {
   ValidationError,
   ConflictError,
   handleErrors
-} = require('../shared/utils');
+} = require('./shared/utils');
 
 const REVIEWS_TABLE = process.env.REVIEWS_TABLE;
 const BOOKINGS_TABLE = process.env.BOOKINGS_TABLE;

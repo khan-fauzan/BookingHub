@@ -15,7 +15,7 @@ const {
   ValidationError,
   ErrorCodes,
   handleErrors
-} = require('../shared/utils');
+} = require('./shared/utils');
 
 const PROPERTIES_TABLE = process.env.PROPERTIES_TABLE;
 const AVAILABILITY_TABLE = process.env.AVAILABILITY_TABLE;

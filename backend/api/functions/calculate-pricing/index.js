@@ -14,7 +14,7 @@ const {
   validateDateRange,
   getDatesBetween,
   handleErrors
-} = require('../shared/utils');
+} = require('./shared/utils');
 
 const AVAILABILITY_TABLE = process.env.AVAILABILITY_TABLE;
 const METADATA_TABLE = process.env.METADATA_TABLE;

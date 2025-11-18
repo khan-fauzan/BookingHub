@@ -10,7 +10,7 @@ const {
   successResponse,
   parseQueryParams,
   handleErrors
-} = require('../shared/utils');
+} = require('./shared/utils');
 
 const PROPERTIES_TABLE = process.env.PROPERTIES_TABLE;
 

@@ -12,7 +12,7 @@ const {
   UnauthorizedError,
   NotFoundError,
   handleErrors
-} = require('../shared/utils');
+} = require('./shared/utils');
 
 const USERS_TABLE = process.env.USERS_TABLE;
 

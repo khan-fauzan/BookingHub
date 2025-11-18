@@ -17,7 +17,7 @@ const {
   UnauthorizedError,
   ValidationError,
   handleErrors
-} = require('../shared/utils');
+} = require('./shared/utils');
 
 const BOOKINGS_TABLE = process.env.BOOKINGS_TABLE;
 const AVAILABILITY_TABLE = process.env.AVAILABILITY_TABLE;
