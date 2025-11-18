@@ -187,9 +187,9 @@ Resources:
       Environment:
         Variables:
           PROPERTIES_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTable'
           AVAILABILITY_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -233,7 +233,7 @@ Resources:
       Environment:
         Variables:
           PROPERTIES_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -265,7 +265,7 @@ Resources:
       Environment:
         Variables:
           PROPERTIES_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-PropertiesTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -300,7 +300,7 @@ Resources:
       Environment:
         Variables:
           AVAILABILITY_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -334,9 +334,9 @@ Resources:
       Environment:
         Variables:
           AVAILABILITY_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTable'
           METADATA_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-MetadataTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-MetadataTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -376,9 +376,9 @@ Resources:
       Environment:
         Variables:
           BOOKINGS_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTable'
           AVAILABILITY_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -414,7 +414,7 @@ Resources:
       Environment:
         Variables:
           BOOKINGS_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -445,9 +445,9 @@ Resources:
       Environment:
         Variables:
           BOOKINGS_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-BookingsTable'
           AVAILABILITY_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-AvailabilityTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -485,7 +485,7 @@ Resources:
       Environment:
         Variables:
           USERS_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-UsersTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-UsersTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -516,7 +516,7 @@ Resources:
       Environment:
         Variables:
           USERS_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-UsersTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-UsersTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -551,7 +551,7 @@ Resources:
       Environment:
         Variables:
           REVIEWS_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-ReviewsTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-ReviewsTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
@@ -582,7 +582,7 @@ Resources:
       Environment:
         Variables:
           REVIEWS_TABLE:
-            Fn::ImportValue: !Sub '${DynamoDBStackName}-ReviewsTableName'
+            Fn::ImportValue: !Sub '${DynamoDBStackName}-ReviewsTable'
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
