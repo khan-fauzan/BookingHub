@@ -1,0 +1,723 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'DynamoDB Tables for Hotel Booking Platform - Creates Properties, Availability, Bookings, Users, Reviews, and Metadata tables with Global Secondary Indexes'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name to append to table names
+
+  BillingMode:
+    Type: String
+    Default: PAY_PER_REQUEST
+    AllowedValues:
+      - PAY_PER_REQUEST
+      - PROVISIONED
+    Description: DynamoDB billing mode (On-Demand or Provisioned)
+
+  ProvisionedReadCapacity:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    Description: Provisioned read capacity units (only used if BillingMode is PROVISIONED)
+
+  ProvisionedWriteCapacity:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    Description: Provisioned write capacity units (only used if BillingMode is PROVISIONED)
+
+  EnablePointInTimeRecovery:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Enable Point-in-Time Recovery for all tables
+
+  EnableStreams:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Enable DynamoDB Streams for Bookings and Reviews tables
+
+Conditions:
+  IsProvisioned: !Equals [!Ref BillingMode, PROVISIONED]
+  EnablePITR: !Equals [!Ref EnablePointInTimeRecovery, 'true']
+  EnableDDBStreams: !Equals [!Ref EnableStreams, 'true']
+
+Resources:
+  # ==========================================
+  # Properties Table
+  # ==========================================
+  PropertiesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hotel-booking-properties-${Environment}'
+      BillingMode: !Ref BillingMode
+
+      # Primary Key
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        # GSI Attributes
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+        - AttributeName: GSI2PK
+          AttributeType: S
+        - AttributeName: GSI2SK
+          AttributeType: S
+        - AttributeName: GSI3PK
+          AttributeType: S
+        - AttributeName: GSI3SK
+          AttributeType: S
+        - AttributeName: GSI4PK
+          AttributeType: S
+        - AttributeName: GSI4SK
+          AttributeType: S
+        - AttributeName: GSI5PK
+          AttributeType: S
+        - AttributeName: GSI5SK
+          AttributeType: S
+        - AttributeName: Slug
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+      # Global Secondary Indexes
+      GlobalSecondaryIndexes:
+        # GSI1: LocationIndex - Search by city and rating
+        - IndexName: LocationIndex
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI2: GeoIndex - Proximity search by geohash
+        - IndexName: GeoIndex
+          KeySchema:
+            - AttributeName: GSI2PK
+              KeyType: HASH
+            - AttributeName: GSI2SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI3: OwnerIndex - Get properties by owner
+        - IndexName: OwnerIndex
+          KeySchema:
+            - AttributeName: GSI3PK
+              KeyType: HASH
+            - AttributeName: GSI3SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI4: TypeRatingIndex - Filter by property type and rating
+        - IndexName: TypeRatingIndex
+          KeySchema:
+            - AttributeName: GSI4PK
+              KeyType: HASH
+            - AttributeName: GSI4SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI5: FeaturedIndex - Get featured properties (Sparse Index)
+        - IndexName: FeaturedIndex
+          KeySchema:
+            - AttributeName: GSI5PK
+              KeyType: HASH
+            - AttributeName: GSI5SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI6: SlugIndex - Get property by URL slug
+        - IndexName: SlugIndex
+          KeySchema:
+            - AttributeName: Slug
+              KeyType: HASH
+            - AttributeName: SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: KEYS_ONLY
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+      ProvisionedThroughput: !If
+        - IsProvisioned
+        - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+          WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+        - !Ref AWS::NoValue
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [EnablePITR, true, false]
+
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: HotelBooking
+        - Key: Table
+          Value: Properties
+
+  # ==========================================
+  # Availability Table
+  # ==========================================
+  AvailabilityTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hotel-booking-availability-${Environment}'
+      BillingMode: !Ref BillingMode
+
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+      GlobalSecondaryIndexes:
+        # GSI1: PropertyDateIndex - Get all room availability for property on date
+        - IndexName: PropertyDateIndex
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+      ProvisionedThroughput: !If
+        - IsProvisioned
+        - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+          WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+        - !Ref AWS::NoValue
+
+      # TTL for automatic cleanup of old availability records (older than 2 years)
+      TimeToLiveSpecification:
+        AttributeName: TTL
+        Enabled: true
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [EnablePITR, true, false]
+
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: HotelBooking
+        - Key: Table
+          Value: Availability
+
+  # ==========================================
+  # Bookings Table
+  # ==========================================
+  BookingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hotel-booking-bookings-${Environment}'
+      BillingMode: !Ref BillingMode
+
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+        - AttributeName: GSI2PK
+          AttributeType: S
+        - AttributeName: GSI2SK
+          AttributeType: S
+        - AttributeName: GSI3PK
+          AttributeType: S
+        - AttributeName: GSI3SK
+          AttributeType: S
+        - AttributeName: GSI4PK
+          AttributeType: S
+        - AttributeName: GSI4SK
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+      GlobalSecondaryIndexes:
+        # GSI1: UserBookingsIndex - Get user's bookings sorted by check-in date
+        - IndexName: UserBookingsIndex
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI2: PropertyBookingsIndex - Get property's bookings
+        - IndexName: PropertyBookingsIndex
+          KeySchema:
+            - AttributeName: GSI2PK
+              KeyType: HASH
+            - AttributeName: GSI2SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI3: StatusIndex - Get bookings by status
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: GSI3PK
+              KeyType: HASH
+            - AttributeName: GSI3SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI4: ReferenceIndex - Get booking by reference number
+        - IndexName: ReferenceIndex
+          KeySchema:
+            - AttributeName: GSI4PK
+              KeyType: HASH
+            - AttributeName: GSI4SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: KEYS_ONLY
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+      ProvisionedThroughput: !If
+        - IsProvisioned
+        - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+          WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+        - !Ref AWS::NoValue
+
+      # Enable DynamoDB Streams for triggering notifications
+      StreamSpecification: !If
+        - EnableDDBStreams
+        - StreamViewType: NEW_AND_OLD_IMAGES
+        - !Ref AWS::NoValue
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [EnablePITR, true, false]
+
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: HotelBooking
+        - Key: Table
+          Value: Bookings
+
+  # ==========================================
+  # Users Table
+  # ==========================================
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hotel-booking-users-${Environment}'
+      BillingMode: !Ref BillingMode
+
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+      GlobalSecondaryIndexes:
+        # GSI1: EmailIndex - Get user by email (for login)
+        - IndexName: EmailIndex
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+      ProvisionedThroughput: !If
+        - IsProvisioned
+        - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+          WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+        - !Ref AWS::NoValue
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [EnablePITR, true, false]
+
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: HotelBooking
+        - Key: Table
+          Value: Users
+
+  # ==========================================
+  # Reviews Table
+  # ==========================================
+  ReviewsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hotel-booking-reviews-${Environment}'
+      BillingMode: !Ref BillingMode
+
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+        - AttributeName: GSI2PK
+          AttributeType: S
+        - AttributeName: GSI2SK
+          AttributeType: S
+        - AttributeName: GSI3PK
+          AttributeType: S
+        - AttributeName: GSI3SK
+          AttributeType: S
+        - AttributeName: GSI4PK
+          AttributeType: S
+        - AttributeName: GSI4SK
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+      GlobalSecondaryIndexes:
+        # GSI1: PropertyReviewsIndex - Get all reviews for a property
+        - IndexName: PropertyReviewsIndex
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI2: UserReviewsIndex - Get all reviews by a user
+        - IndexName: UserReviewsIndex
+          KeySchema:
+            - AttributeName: GSI2PK
+              KeyType: HASH
+            - AttributeName: GSI2SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI3: StatusIndex - Get pending reviews for moderation
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: GSI3PK
+              KeyType: HASH
+            - AttributeName: GSI3SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+        # GSI4: BookingReviewIndex - Get review by booking ID
+        - IndexName: BookingReviewIndex
+          KeySchema:
+            - AttributeName: GSI4PK
+              KeyType: HASH
+            - AttributeName: GSI4SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: KEYS_ONLY
+          ProvisionedThroughput: !If
+            - IsProvisioned
+            - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+              WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+            - !Ref AWS::NoValue
+
+      ProvisionedThroughput: !If
+        - IsProvisioned
+        - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+          WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+        - !Ref AWS::NoValue
+
+      # Enable DynamoDB Streams for updating property ratings
+      StreamSpecification: !If
+        - EnableDDBStreams
+        - StreamViewType: NEW_AND_OLD_IMAGES
+        - !Ref AWS::NoValue
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [EnablePITR, true, false]
+
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: HotelBooking
+        - Key: Table
+          Value: Reviews
+
+  # ==========================================
+  # Metadata Table
+  # ==========================================
+  MetadataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hotel-booking-metadata-${Environment}'
+      BillingMode: !Ref BillingMode
+
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+      ProvisionedThroughput: !If
+        - IsProvisioned
+        - ReadCapacityUnits: !Ref ProvisionedReadCapacity
+          WriteCapacityUnits: !Ref ProvisionedWriteCapacity
+        - !Ref AWS::NoValue
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [EnablePITR, true, false]
+
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: HotelBooking
+        - Key: Table
+          Value: Metadata
+
+Outputs:
+  # Table Names
+  PropertiesTableName:
+    Description: Name of the Properties DynamoDB table
+    Value: !Ref PropertiesTable
+    Export:
+      Name: !Sub '${AWS::StackName}-PropertiesTable'
+
+  AvailabilityTableName:
+    Description: Name of the Availability DynamoDB table
+    Value: !Ref AvailabilityTable
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityTable'
+
+  BookingsTableName:
+    Description: Name of the Bookings DynamoDB table
+    Value: !Ref BookingsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-BookingsTable'
+
+  UsersTableName:
+    Description: Name of the Users DynamoDB table
+    Value: !Ref UsersTable
+    Export:
+      Name: !Sub '${AWS::StackName}-UsersTable'
+
+  ReviewsTableName:
+    Description: Name of the Reviews DynamoDB table
+    Value: !Ref ReviewsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ReviewsTable'
+
+  MetadataTableName:
+    Description: Name of the Metadata DynamoDB table
+    Value: !Ref MetadataTable
+    Export:
+      Name: !Sub '${AWS::StackName}-MetadataTable'
+
+  # Table ARNs
+  PropertiesTableArn:
+    Description: ARN of the Properties DynamoDB table
+    Value: !GetAtt PropertiesTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-PropertiesTableArn'
+
+  AvailabilityTableArn:
+    Description: ARN of the Availability DynamoDB table
+    Value: !GetAtt AvailabilityTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityTableArn'
+
+  BookingsTableArn:
+    Description: ARN of the Bookings DynamoDB table
+    Value: !GetAtt BookingsTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-BookingsTableArn'
+
+  UsersTableArn:
+    Description: ARN of the Users DynamoDB table
+    Value: !GetAtt UsersTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-UsersTableArn'
+
+  ReviewsTableArn:
+    Description: ARN of the Reviews DynamoDB table
+    Value: !GetAtt ReviewsTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ReviewsTableArn'
+
+  MetadataTableArn:
+    Description: ARN of the Metadata DynamoDB table
+    Value: !GetAtt MetadataTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-MetadataTableArn'
+
+  # Stream ARNs (if enabled)
+  BookingsTableStreamArn:
+    Condition: EnableDDBStreams
+    Description: Stream ARN of the Bookings DynamoDB table
+    Value: !GetAtt BookingsTable.StreamArn
+    Export:
+      Name: !Sub '${AWS::StackName}-BookingsTableStreamArn'
+
+  ReviewsTableStreamArn:
+    Condition: EnableDDBStreams
+    Description: Stream ARN of the Reviews DynamoDB table
+    Value: !GetAtt ReviewsTable.StreamArn
+    Export:
+      Name: !Sub '${AWS::StackName}-ReviewsTableStreamArn'

@@ -1,0 +1,25 @@
+{
+  "name": "hotel-booking-dynamodb-seed",
+  "version": "1.0.0",
+  "description": "DynamoDB data seeding scripts for Hotel Booking Platform",
+  "scripts": {
+    "generate": "node generate-sample-data.js",
+    "seed": "node seed-dynamodb.js",
+    "seed:dev": "node seed-dynamodb.js --env dev",
+    "seed:staging": "node seed-dynamodb.js --env staging",
+    "seed:prod": "node seed-dynamodb.js --env prod",
+    "clean": "node clean-tables.js",
+    "validate": "node validate-data.js"
+  },
+  "keywords": ["dynamodb", "hotel", "booking", "seed", "sample-data"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.651.1",
+    "@aws-sdk/lib-dynamodb": "^3.651.1",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

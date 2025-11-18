@@ -1,0 +1,26 @@
+[
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "staging"
+  },
+  {
+    "ParameterKey": "BillingMode",
+    "ParameterValue": "PAY_PER_REQUEST"
+  },
+  {
+    "ParameterKey": "ProvisionedReadCapacity",
+    "ParameterValue": "10"
+  },
+  {
+    "ParameterKey": "ProvisionedWriteCapacity",
+    "ParameterValue": "10"
+  },
+  {
+    "ParameterKey": "EnablePointInTimeRecovery",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "EnableStreams",
+    "ParameterValue": "true"
+  }
+]
