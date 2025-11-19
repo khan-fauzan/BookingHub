@@ -158,8 +158,8 @@ async function searchProperties(location) {
         ':type': 'Property'
       }
     };
-  } else {
-    // Search by country
+  } else if (country) {
+    // Search by country only
     queryParams = {
       TableName: PROPERTIES_TABLE,
       FilterExpression: 'EntityType = :type AND Country = :country',
@@ -168,6 +168,19 @@ async function searchProperties(location) {
         ':country': country
       }
     };
+  } else if (city) {
+    // Search by city only (without country) - use Scan with FilterExpression
+    queryParams = {
+      TableName: PROPERTIES_TABLE,
+      FilterExpression: 'EntityType = :type AND City = :city',
+      ExpressionAttributeValues: {
+        ':type': 'Property',
+        ':city': city
+      }
+    };
+  } else {
+    // No valid search criteria provided
+    throw new ValidationError('Please provide at least one of: city with country, country, city, or lat/lng coordinates');
   }
 
   const result = await queryDynamoDB(queryParams);
