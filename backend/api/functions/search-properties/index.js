@@ -132,9 +132,8 @@ async function searchProperties(location) {
 
   if (city && country) {
     // Search by city using LocationIndex - use Query with KeyConditionExpression
-    const locationKey = state
-      ? `CITY#${city}#${state}#${country}`
-      : `CITY#${city}#${country}`;
+    // GSI1PK format: CITY#{city}#{country} (without state)
+    const locationKey = `CITY#${city}#${country}`;
 
     queryParams = {
       TableName: PROPERTIES_TABLE,
@@ -167,9 +166,10 @@ async function searchProperties(location) {
     return result.Items || [];
   } else if (country) {
     // Search by country only - use Scan
+    // Note: Country is nested in Address object
     const scanParams = {
       TableName: PROPERTIES_TABLE,
-      FilterExpression: 'EntityType = :type AND Country = :country',
+      FilterExpression: 'EntityType = :type AND Address.Country = :country',
       ExpressionAttributeValues: {
         ':type': 'Property',
         ':country': country
@@ -180,9 +180,10 @@ async function searchProperties(location) {
     return result.Items || [];
   } else if (city) {
     // Search by city only (without country) - use Scan with FilterExpression
+    // Note: City is nested in Address object
     const scanParams = {
       TableName: PROPERTIES_TABLE,
-      FilterExpression: 'EntityType = :type AND City = :city',
+      FilterExpression: 'EntityType = :type AND Address.City = :city',
       ExpressionAttributeValues: {
         ':type': 'Property',
         ':city': city
