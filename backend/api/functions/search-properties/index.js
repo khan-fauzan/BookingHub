@@ -30,8 +30,11 @@ exports.handler = handleErrors(async (event, context) => {
   const params = parseQueryParams(event);
 
   // Validate required parameters
-  if (!params.city && !params.country && !params.lat) {
-    throw new ValidationError('At least one of city, country, or lat/lng coordinates is required');
+  // Note: DynamoDB Scan with nested Address attributes (city-only or country-only) doesn't work reliably
+  // We require both city AND country to use the LocationIndex Query which works perfectly
+  // Alternative: provide lat/lng for geospatial search
+  if (!(params.city && params.country) && !(params.lat && params.lng)) {
+    throw new ValidationError('Please provide both city and country, or lat/lng coordinates for search');
   }
 
   // Validate dates if provided
@@ -164,38 +167,10 @@ async function searchProperties(location) {
 
     const result = await scanDynamoDB(scanParams);
     return result.Items || [];
-  } else if (country) {
-    // Search by country only - use Scan
-    // Note: Country is nested in Address object
-    const scanParams = {
-      TableName: PROPERTIES_TABLE,
-      FilterExpression: 'EntityType = :type AND Address.Country = :country',
-      ExpressionAttributeValues: {
-        ':type': 'Property',
-        ':country': country
-      }
-    };
-
-    const result = await scanDynamoDB(scanParams);
-    return result.Items || [];
-  } else if (city) {
-    // Search by city only (without country) - use Scan with FilterExpression
-    // Note: City is nested in Address object
-    const scanParams = {
-      TableName: PROPERTIES_TABLE,
-      FilterExpression: 'EntityType = :type AND Address.City = :city',
-      ExpressionAttributeValues: {
-        ':type': 'Property',
-        ':city': city
-      }
-    };
-
-    const result = await scanDynamoDB(scanParams);
-    return result.Items || [];
-  } else {
-    // No valid search criteria provided
-    throw new ValidationError('Please provide at least one of: city with country, country, city, or lat/lng coordinates');
   }
+
+  // This should never be reached due to validation, but just in case
+  throw new ValidationError('Invalid search parameters');
 }
 
 /**
