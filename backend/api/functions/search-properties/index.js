@@ -7,6 +7,7 @@
 
 const {
   queryDynamoDB,
+  scanDynamoDB,
   getDatesBetween,
   successResponse,
   errorResponse,
@@ -130,7 +131,7 @@ async function searchProperties(location) {
   let queryParams;
 
   if (city && country) {
-    // Search by city using LocationIndex
+    // Search by city using LocationIndex - use Query with KeyConditionExpression
     const locationKey = state
       ? `CITY#${city}#${state}#${country}`
       : `CITY#${city}#${country}`;
@@ -145,22 +146,28 @@ async function searchProperties(location) {
         ':type': 'Property'
       }
     };
+
+    const result = await queryDynamoDB(queryParams);
+    return result.Items || [];
   } else if (lat && lng) {
     // For geospatial search, we'd need to:
     // 1. Calculate geohash prefix for the area
     // 2. Query GeoIndex with that prefix
     // 3. Filter by distance in-memory
     // For now, scan all properties and filter by distance
-    queryParams = {
+    const scanParams = {
       TableName: PROPERTIES_TABLE,
       FilterExpression: 'EntityType = :type',
       ExpressionAttributeValues: {
         ':type': 'Property'
       }
     };
+
+    const result = await scanDynamoDB(scanParams);
+    return result.Items || [];
   } else if (country) {
-    // Search by country only
-    queryParams = {
+    // Search by country only - use Scan
+    const scanParams = {
       TableName: PROPERTIES_TABLE,
       FilterExpression: 'EntityType = :type AND Country = :country',
       ExpressionAttributeValues: {
@@ -168,9 +175,12 @@ async function searchProperties(location) {
         ':country': country
       }
     };
+
+    const result = await scanDynamoDB(scanParams);
+    return result.Items || [];
   } else if (city) {
     // Search by city only (without country) - use Scan with FilterExpression
-    queryParams = {
+    const scanParams = {
       TableName: PROPERTIES_TABLE,
       FilterExpression: 'EntityType = :type AND City = :city',
       ExpressionAttributeValues: {
@@ -178,13 +188,13 @@ async function searchProperties(location) {
         ':city': city
       }
     };
+
+    const result = await scanDynamoDB(scanParams);
+    return result.Items || [];
   } else {
     // No valid search criteria provided
     throw new ValidationError('Please provide at least one of: city with country, country, city, or lat/lng coordinates');
   }
-
-  const result = await queryDynamoDB(queryParams);
-  return result.Items || [];
 }
 
 /**

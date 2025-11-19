@@ -3,7 +3,7 @@
  */
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand, GetCommand, PutCommand, UpdateCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand, ScanCommand, GetCommand, PutCommand, UpdateCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 
 // Initialize DynamoDB client
 const dynamoClient = new DynamoDBClient({
@@ -168,6 +168,19 @@ async function queryDynamoDB(params) {
   } catch (error) {
     console.error('DynamoDB Query Error:', error);
     throw new DatabaseError('Failed to query database', error);
+  }
+}
+
+/**
+ * Scan DynamoDB
+ */
+async function scanDynamoDB(params) {
+  try {
+    const command = new ScanCommand(params);
+    return await docClient.send(command);
+  } catch (error) {
+    console.error('DynamoDB Scan Error:', error);
+    throw new DatabaseError('Failed to scan database', error);
   }
 }
 
@@ -357,6 +370,7 @@ module.exports = {
   // DynamoDB operations
   docClient,
   queryDynamoDB,
+  scanDynamoDB,
   getItem,
   putItem,
   updateItem,
