@@ -64,7 +64,21 @@ export function SearchFilters({
   const [filters, setFilters] = useState<FilterState>({});
 
   const handlePriceChange = (min?: number, max?: number) => {
-    const newFilters = { ...filters, minPrice: min, maxPrice: max };
+    const newFilters = { ...filters };
+
+    // Only add properties if they have values, otherwise remove them
+    if (min !== undefined) {
+      newFilters.minPrice = min;
+    } else {
+      delete newFilters.minPrice;
+    }
+
+    if (max !== undefined) {
+      newFilters.maxPrice = max;
+    } else {
+      delete newFilters.maxPrice;
+    }
+
     setFilters(newFilters);
     onFilterChange(newFilters);
   };
@@ -121,7 +135,14 @@ export function SearchFilters({
   };
 
   const handleGuestRatingChange = (rating?: number) => {
-    const newFilters = { ...filters, minGuestRating: rating };
+    const newFilters = { ...filters };
+
+    if (rating !== undefined) {
+      newFilters.minGuestRating = rating;
+    } else {
+      delete newFilters.minGuestRating;
+    }
+
     setFilters(newFilters);
     onFilterChange(newFilters);
   };
@@ -262,7 +283,7 @@ export function SearchFilters({
                 >
                   <input
                     type="checkbox"
-                    checked={filters.starRating?.includes(rating)}
+                    checked={filters.starRating?.includes(rating) ?? false}
                     onChange={() => handleStarRatingToggle(rating)}
                     className="w-4 h-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
                   />
@@ -296,7 +317,7 @@ export function SearchFilters({
                 >
                   <input
                     type="checkbox"
-                    checked={filters.propertyType?.includes(type.value)}
+                    checked={filters.propertyType?.includes(type.value) ?? false}
                     onChange={() => handlePropertyTypeToggle(type.value)}
                     className="w-4 h-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
                   />
