@@ -3,17 +3,52 @@
 import { Button, Input } from "@/components/ui";
 import { Search, MapPin, Calendar, Users } from "lucide-react";
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export function SearchBar() {
-  const [destination, setDestination] = useState("");
-  const [checkIn, setCheckIn] = useState("");
-  const [checkOut, setCheckOut] = useState("");
-  const [guests, setGuests] = useState("2");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Initialize from URL params if available
+  const [destination, setDestination] = useState(
+    searchParams.get("destination") || searchParams.get("city") || ""
+  );
+  const [checkIn, setCheckIn] = useState(searchParams.get("checkIn") || "");
+  const [checkOut, setCheckOut] = useState(searchParams.get("checkOut") || "");
+  const [guests, setGuests] = useState(searchParams.get("adults") || "2");
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Search:", { destination, checkIn, checkOut, guests });
-    alert("Search functionality (Frontend only - no backend integration yet)");
+
+    // Validate inputs
+    if (!destination) {
+      alert("Please enter a destination");
+      return;
+    }
+
+    if (!checkIn || !checkOut) {
+      alert("Please select check-in and check-out dates");
+      return;
+    }
+
+    // Parse destination - assuming format "City, Country" or just "City"
+    const destinationParts = destination.split(",").map((s) => s.trim());
+    const city = destinationParts[0];
+    const country = destinationParts.length > 1 ? destinationParts[destinationParts.length - 1] : "";
+
+    // Build query parameters
+    const params = new URLSearchParams();
+
+    if (city) params.set("city", city);
+    if (country) params.set("country", country);
+    if (!country) params.set("destination", destination);
+
+    params.set("checkIn", checkIn);
+    params.set("checkOut", checkOut);
+    params.set("adults", guests);
+
+    // Navigate to search page
+    router.push(`/search?${params.toString()}`);
   };
 
   return (

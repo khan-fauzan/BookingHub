@@ -2,6 +2,7 @@ import { SearchBar } from "@/components/search/search-bar";
 import { Card, CardContent, Badge } from "@/components/ui";
 import { Star, TrendingUp, Award, Shield, Clock } from "lucide-react";
 import Image from "next/image";
+import { Suspense } from "react";
 
 export default function HomePage() {
   const popularDestinations = [
@@ -57,7 +58,9 @@ export default function HomePage() {
 
           {/* Search Bar */}
           <div className="max-w-6xl mx-auto">
-            <SearchBar />
+            <Suspense fallback={<div className="bg-white rounded-xl shadow-2xl p-8 text-center">Loading...</div>}>
+              <SearchBar />
+            </Suspense>
           </div>
         </div>
       </section>

@@ -171,6 +171,203 @@ export interface SearchFilters {
   sortBy?: "recommended" | "price_low" | "price_high" | "rating" | "distance";
 }
 
+// Backend API types for property search
+export interface PropertySearchParams {
+  // Location (required - one of the following)
+  city?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+  radius?: number;
+
+  // Dates & Guests
+  checkIn: string; // ISO date
+  checkOut: string; // ISO date
+  adults: number;
+  children?: number;
+  rooms?: number;
+
+  // Filters
+  minPrice?: number;
+  maxPrice?: number;
+  starRating?: number[];
+  propertyType?: string[];
+  amenities?: string[];
+  minGuestRating?: number;
+  freeCancellation?: boolean;
+
+  // Sorting
+  sortBy?: "recommended" | "price_asc" | "price_desc" | "rating" | "distance";
+
+  // Pagination
+  limit?: number;
+  offset?: number;
+  nextToken?: string;
+}
+
+export interface PropertySearchResult {
+  propertyId: string;
+  name: string;
+  slug: string;
+  propertyType: string;
+  starRating: number;
+  location: {
+    city: string;
+    state: string;
+    country: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    distanceFromCenter: number;
+  };
+  rating: {
+    average: number;
+    reviewCount: number;
+  };
+  images: {
+    primary: string;
+    count: number;
+  };
+  pricing: {
+    pricePerNight: number;
+    totalPrice: number;
+    currency: string;
+    taxesIncluded: boolean;
+  };
+  availability: {
+    available: boolean;
+    roomsAvailable: number;
+  };
+  amenities: string[];
+  badges: string[];
+  isFeatured: boolean;
+}
+
+export interface PropertySearchResponse {
+  success: boolean;
+  data: {
+    properties: PropertySearchResult[];
+    filters: {
+      applied: {
+        city?: string;
+        checkIn: string;
+        checkOut: string;
+        adults: number;
+      };
+      available: {
+        priceRange: { min: number; max: number };
+        starRatings: number[];
+        propertyTypes: string[];
+        amenities: string[];
+      };
+    };
+    pagination: {
+      limit: number;
+      offset: number;
+      total: number;
+      hasMore: boolean;
+      nextToken?: string;
+    };
+  };
+  meta: {
+    timestamp: string;
+    requestId: string;
+  };
+}
+
+// Property details response
+export interface PropertyDetailsResponse {
+  success: boolean;
+  data: {
+    property: {
+      propertyId: string;
+      name: string;
+      slug: string;
+      description: string;
+      propertyType: string;
+      starRating: number;
+      location: {
+        address: {
+          line1: string;
+          line2?: string;
+          city: string;
+          state: string;
+          country: string;
+          postalCode: string;
+        };
+        coordinates: {
+          latitude: number;
+          longitude: number;
+        };
+        distanceFromCenter: number;
+        nearbyLandmarks: Array<{
+          name: string;
+          distance: number;
+        }>;
+      };
+      contact: {
+        phone: string;
+        email: string;
+        website?: string;
+      };
+      rating: {
+        overall: number;
+        breakdown: {
+          cleanliness: number;
+          comfort: number;
+          location: number;
+          facilities: number;
+          staff: number;
+          value: number;
+        };
+        reviewCount: number;
+      };
+      images: Array<{
+        url: string;
+        category: string;
+        altText: string;
+        isPrimary: boolean;
+      }>;
+      amenities: Array<{
+        id: string;
+        name: string;
+        category: string;
+      }>;
+      roomTypes: Array<{
+        roomTypeId: string;
+        name: string;
+        description: string;
+        maxOccupancy: number;
+        bedConfiguration: Array<{
+          type: string;
+          count: number;
+        }>;
+        roomSize: number;
+        amenities: string[];
+        images: string[];
+        pricing: {
+          basePrice: number;
+          totalPrice: number;
+          currency: string;
+        };
+        availability: {
+          available: boolean;
+          roomsAvailable: number;
+        };
+        cancellationPolicy: string;
+      }>;
+      policies: {
+        checkIn: string;
+        checkOut: string;
+        cancellation: string;
+        pets: string;
+        children: string;
+      };
+      highlights: string[];
+    };
+  };
+}
+
 // API Response types
 export interface ApiResponse<T> {
   success: boolean;
